@@ -151,10 +151,12 @@ export class CatalogService {
     const visibility = includeHidden
       ? 'true'
       : "p.status in ('available', 'low-stock', 'sold-out', 'preorder')"
+    const categoryVisibility = includeHidden ? 'true' : 'c.active'
     const rows = await this.database.sql.unsafe<ProductRow[]>(
       `
         ${this.productSelect()}
         where ${visibility}
+          and ${categoryVisibility}
           and ($1::text is null or p.category_id = $1 or c.slug = $1)
           and (
             $2::text is null
@@ -185,7 +187,13 @@ export class CatalogService {
       `
         ${this.productSelect()}
         where (p.slug = $1 or p.id = $1)
-          and ($2::boolean or p.status in ('available', 'low-stock', 'sold-out', 'preorder'))
+          and (
+            $2::boolean
+            or (
+              p.status in ('available', 'low-stock', 'sold-out', 'preorder')
+              and c.active
+            )
+          )
         limit 1
       `,
       [slugOrId, includeHidden],
