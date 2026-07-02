@@ -55,6 +55,7 @@ export class OrderPdfService {
     }
 
     field('Destinatario', order.customer)
+    field('DNI', order.documentNumber)
     field('WhatsApp', order.whatsapp)
     field('Ciudad', order.city)
     field('Agencia / entrega', order.deliveryType)

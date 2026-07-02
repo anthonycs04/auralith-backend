@@ -27,6 +27,7 @@ type OrderRow = {
   code: string
   created_at: string
   customer_name: string
+  document_number: string | null
   email: string | null
   id: string
   items: Array<{
@@ -60,6 +61,7 @@ export class OrdersService {
       createdAt: row.created_at,
       customer: row.customer_name,
       deliveryType: row.shipping_method,
+      documentNumber: row.document_number,
       email: row.email,
       id: row.id,
       items: row.items,
@@ -116,6 +118,7 @@ export class OrdersService {
             $3::text is null
             or o.code ilike '%' || $3 || '%'
             or o.customer_name ilike '%' || $3 || '%'
+            or o.document_number ilike '%' || $3 || '%'
             or o.whatsapp ilike '%' || $3 || '%'
           )
         order by o.created_at desc
@@ -248,14 +251,14 @@ export class OrdersService {
 
       const [order] = await transaction<{ id: string }[]>`
         insert into public.orders (
-          code, source, status, customer_name, whatsapp, email, city, address,
-          shipping_method, note, subtotal, total, created_by
+          code, source, status, customer_name, document_number, whatsapp, email,
+          city, address, shipping_method, note, subtotal, total, created_by
         )
         values (
           public.next_order_code(${source}), ${source}, 'new', ${dto.customerName},
-          ${dto.whatsapp}, ${dto.email ?? null}, ${dto.city},
-          ${dto.address ?? null}, ${dto.shippingMethod}, ${dto.note ?? null},
-          ${subtotal}, ${subtotal}, ${actorId}
+          ${dto.documentNumber ?? null}, ${dto.whatsapp}, ${dto.email ?? null},
+          ${dto.city}, ${dto.address ?? null}, ${dto.shippingMethod},
+          ${dto.note ?? null}, ${subtotal}, ${subtotal}, ${actorId}
         )
         returning id
       `
@@ -460,6 +463,7 @@ export class OrdersService {
     await this.database.sql`
       update public.orders set
         customer_name = ${dto.customerName ?? current.customer},
+        document_number = ${dto.documentNumber ?? current.documentNumber},
         whatsapp = ${dto.whatsapp ?? current.whatsapp},
         email = ${dto.email ?? current.email},
         city = ${dto.city ?? current.city},

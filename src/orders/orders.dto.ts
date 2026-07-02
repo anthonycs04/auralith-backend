@@ -44,6 +44,10 @@ export class CreateOrderDto {
   @IsString()
   customerName!: string
 
+  @IsOptional()
+  @IsString()
+  documentNumber?: string
+
   @IsString()
   whatsapp!: string
 
@@ -87,6 +91,10 @@ export class UpdateOrderCustomerDto {
   @IsOptional()
   @IsString()
   customerName?: string
+
+  @IsOptional()
+  @IsString()
+  documentNumber?: string
 
   @IsOptional()
   @IsString()

@@ -139,6 +139,7 @@ create table if not exists public.orders (
   status text not null default 'new'
     check (status in ('new', 'contacted', 'confirmed', 'preparing', 'delivered', 'cancelled')),
   customer_name text not null,
+  document_number text,
   whatsapp text not null default '',
   email text,
   city text not null default '',
