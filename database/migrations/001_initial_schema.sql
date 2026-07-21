@@ -32,6 +32,20 @@ create table if not exists public.categories (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.subcategories (
+  id text primary key,
+  category_id text not null references public.categories(id) on delete cascade,
+  slug text not null,
+  name text not null,
+  description text not null default '',
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  seo jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (category_id, slug)
+);
+
 create table if not exists public.intentions (
   id text primary key,
   slug text not null unique,
@@ -39,6 +53,7 @@ create table if not exists public.intentions (
   affirmation text not null default '',
   description text not null default '',
   ritual_prompt text not null default '',
+  image_url text,
   icon text not null default 'sparkles',
   color text not null default '#8FA58C',
   benefits text[] not null default '{}',
@@ -109,6 +124,12 @@ create table if not exists public.product_intentions (
   product_id text not null references public.products(id) on delete cascade,
   intention_id text not null references public.intentions(id) on delete cascade,
   primary key (product_id, intention_id)
+);
+
+create table if not exists public.product_subcategories (
+  product_id text not null references public.products(id) on delete cascade,
+  subcategory_id text not null references public.subcategories(id) on delete cascade,
+  primary key (product_id, subcategory_id)
 );
 
 create sequence if not exists public.web_order_seq start with 1001;
@@ -227,9 +248,11 @@ create table if not exists public.audit_logs (
 );
 
 create index if not exists products_category_idx on public.products(category_id);
+create index if not exists subcategories_category_idx on public.subcategories(category_id, sort_order);
 create index if not exists products_status_idx on public.products(status);
 create index if not exists products_featured_idx on public.products(featured) where featured;
 create index if not exists product_intentions_intention_idx on public.product_intentions(intention_id);
+create index if not exists product_subcategories_subcategory_idx on public.product_subcategories(subcategory_id);
 create index if not exists orders_source_created_idx on public.orders(source, created_at desc);
 create index if not exists orders_status_created_idx on public.orders(status, created_at desc);
 create index if not exists inventory_product_created_idx on public.inventory_movements(product_id, created_at desc);
@@ -250,7 +273,8 @@ declare
   table_name text;
 begin
   foreach table_name in array array[
-    'profiles', 'categories', 'intentions', 'products', 'orders', 'faqs', 'complaints'
+    'profiles', 'categories', 'subcategories', 'intentions',
+    'products', 'orders', 'faqs', 'complaints'
   ]
   loop
     execute format('drop trigger if exists set_updated_at on public.%I', table_name);
@@ -264,11 +288,13 @@ $$;
 
 alter table public.profiles enable row level security;
 alter table public.categories enable row level security;
+alter table public.subcategories enable row level security;
 alter table public.intentions enable row level security;
 alter table public.category_intentions enable row level security;
 alter table public.products enable row level security;
 alter table public.product_images enable row level security;
 alter table public.product_intentions enable row level security;
+alter table public.product_subcategories enable row level security;
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 alter table public.inventory_movements enable row level security;
@@ -285,6 +311,10 @@ drop policy if exists "Public reads active intentions" on public.intentions;
 create policy "Public reads active intentions" on public.intentions
   for select using (active);
 
+drop policy if exists "Public reads active subcategories" on public.subcategories;
+create policy "Public reads active subcategories" on public.subcategories
+  for select using (active);
+
 drop policy if exists "Public reads category intentions" on public.category_intentions;
 create policy "Public reads category intentions" on public.category_intentions
   for select using (true);
@@ -299,6 +329,10 @@ create policy "Public reads product images" on public.product_images
 
 drop policy if exists "Public reads product intentions" on public.product_intentions;
 create policy "Public reads product intentions" on public.product_intentions
+  for select using (true);
+
+drop policy if exists "Public reads product subcategories" on public.product_subcategories;
+create policy "Public reads product subcategories" on public.product_subcategories
   for select using (true);
 
 drop policy if exists "Public reads site content" on public.site_content;

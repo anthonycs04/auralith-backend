@@ -29,7 +29,7 @@ const siteSettings = {
         'Compre por intencion y fue facilisimo encontrar algo que realmente conectara conmigo.',
     },
   ],
-  whatsappNumber: '+51 999 999 999',
+  whatsappNumber: '+51 943 974 880',
 }
 
 const faqs = [

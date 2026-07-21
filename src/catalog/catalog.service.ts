@@ -10,6 +10,7 @@ import type {
   CategoryDto,
   IntentionDto,
   ProductDto,
+  SubcategoryDto,
 } from './catalog.dto'
 
 type ProductRow = {
@@ -49,6 +50,7 @@ type ProductRow = {
   slug: string
   status: string
   stock: number
+  subcategory_ids: string[]
   subtitle: string
   sustainability: Record<string, unknown>
   tags: string[]
@@ -91,6 +93,7 @@ export class CatalogService {
       slug: row.slug,
       status: row.status,
       stock: row.stock,
+      subcategoryIds: row.subcategory_ids,
       subtitle: row.subtitle,
       sustainability: row.sustainability,
       tags: row.tags,
@@ -130,6 +133,15 @@ export class CatalogService {
           ),
           '{}'::text[]
         ) as intention_ids
+        ,
+        coalesce(
+          (
+            select array_agg(ps.subcategory_id order by ps.subcategory_id)
+            from public.product_subcategories ps
+            where ps.product_id = p.id
+          ),
+          '{}'::text[]
+        ) as subcategory_ids
       from public.products p
       join public.categories c on c.id = p.category_id
     `
@@ -138,6 +150,7 @@ export class CatalogService {
   async listProducts(query: CatalogQueryDto, includeHidden = false) {
     const category = query.categoria ?? null
     const intention = query.intencion ?? null
+    const subcategory = query.subcategoria ?? null
     const search = query.buscar?.trim() || null
     const sort = query.sort ?? 'featured'
     const orderBy =
@@ -170,13 +183,25 @@ export class CatalogService {
           )
           and (
             $3::text is null
-            or p.name ilike '%' || $3 || '%'
-            or p.description ilike '%' || $3 || '%'
-            or p.sku ilike '%' || $3 || '%'
+            or exists (
+              select 1
+              from public.product_subcategories filter_subcategory
+              join public.subcategories sc
+                on sc.id = filter_subcategory.subcategory_id
+              where filter_subcategory.product_id = p.id
+                and (sc.id = $3 or sc.slug = $3)
+                and (${includeHidden} or sc.active)
+            )
+          )
+          and (
+            $4::text is null
+            or p.name ilike '%' || $4 || '%'
+            or p.description ilike '%' || $4 || '%'
+            or p.sku ilike '%' || $4 || '%'
           )
         order by ${orderBy}
       `,
-      [category, intention, search],
+      [category, intention, subcategory, search],
     )
 
     return rows.map((row) => this.mapProduct(row))
@@ -233,6 +258,30 @@ export class CatalogService {
     `
   }
 
+  async listSubcategories(includeInactive = false) {
+    return this.database.sql`
+      select
+        sc.id,
+        sc.category_id as "categoryId",
+        c.slug as "categorySlug",
+        sc.slug,
+        sc.name,
+        sc.description,
+        sc.active,
+        sc.sort_order as "sortOrder",
+        sc.seo,
+        count(distinct p.id)::int as "productCount"
+      from public.subcategories sc
+      join public.categories c on c.id = sc.category_id
+      left join public.product_subcategories ps on ps.subcategory_id = sc.id
+      left join public.products p on p.id = ps.product_id
+        and p.status in ('available', 'low-stock', 'sold-out', 'preorder')
+      where ${includeInactive} or (sc.active and c.active)
+      group by sc.id, c.slug, c.sort_order
+      order by c.sort_order, sc.sort_order, sc.name
+    `
+  }
+
   async listIntentions(includeInactive = false) {
     return this.database.sql`
       select
@@ -242,6 +291,7 @@ export class CatalogService {
         i.affirmation,
         i.description,
         i.ritual_prompt as "ritualPrompt",
+        i.image_url as "imageUrl",
         i.icon,
         i.color,
         i.benefits,
@@ -305,6 +355,48 @@ export class CatalogService {
     return { id: categoryId }
   }
 
+  async saveSubcategory(dto: SubcategoryDto, id?: string) {
+    const subcategoryId = id ?? dto.id ?? `${dto.categoryId}-${dto.slug}`
+
+    await this.database.sql`
+      insert into public.subcategories (
+        id, category_id, slug, name, description, active, sort_order, seo
+      )
+      values (
+        ${subcategoryId}, ${dto.categoryId}, ${dto.slug}, ${dto.name},
+        ${dto.description ?? ''}, ${dto.active ?? true}, ${dto.sortOrder ?? 0},
+        ${this.database.sql.json((dto.seo ?? {}) as never)}
+      )
+      on conflict (id) do update set
+        category_id = excluded.category_id,
+        slug = excluded.slug,
+        name = excluded.name,
+        description = excluded.description,
+        active = excluded.active,
+        sort_order = excluded.sort_order,
+        seo = excluded.seo
+    `
+
+    return { id: subcategoryId }
+  }
+
+  async deleteSubcategory(id: string) {
+    const [{ count }] = await this.database.sql<{ count: number }[]>`
+      select count(*)::int as count
+      from public.product_subcategories
+      where subcategory_id = ${id}
+    `
+
+    if (count > 0) {
+      throw new BadRequestException(
+        'No puedes eliminar una subcategoria que contiene productos.',
+      )
+    }
+
+    await this.database.sql`delete from public.subcategories where id = ${id}`
+    return { deleted: true }
+  }
+
   async deleteCategory(id: string) {
     const [{ count }] = await this.database.sql<{ count: number }[]>`
       select count(*)::int as count from public.products where category_id = ${id}
@@ -326,12 +418,12 @@ export class CatalogService {
     await this.database.sql`
       insert into public.intentions (
         id, slug, name, affirmation, description, ritual_prompt, icon, color,
-        benefits, active, sort_order, seo
+        image_url, benefits, active, sort_order, seo
       )
       values (
         ${intentionId}, ${dto.slug}, ${dto.name}, ${dto.affirmation ?? ''},
         ${dto.description ?? ''}, ${dto.ritualPrompt ?? ''},
-        ${dto.icon ?? 'sparkles'}, ${dto.color ?? '#8FA58C'},
+        ${dto.icon ?? 'sparkles'}, ${dto.color ?? '#8FA58C'}, ${dto.imageUrl ?? null},
         ${dto.benefits ?? []}, ${dto.active ?? true}, ${dto.sortOrder ?? 0},
         ${this.database.sql.json((dto.seo ?? {}) as never)}
       )
@@ -341,6 +433,7 @@ export class CatalogService {
         affirmation = excluded.affirmation,
         description = excluded.description,
         ritual_prompt = excluded.ritual_prompt,
+        image_url = excluded.image_url,
         icon = excluded.icon,
         color = excluded.color,
         benefits = excluded.benefits,
@@ -422,6 +515,18 @@ export class CatalogService {
           await transaction`
             insert into public.product_intentions (product_id, intention_id)
             values (${productId}, ${intentionId})
+          `
+        }
+      }
+
+      if (dto.subcategoryIds) {
+        await transaction`
+          delete from public.product_subcategories where product_id = ${productId}
+        `
+        for (const subcategoryId of dto.subcategoryIds) {
+          await transaction`
+            insert into public.product_subcategories (product_id, subcategory_id)
+            values (${productId}, ${subcategoryId})
           `
         }
       }

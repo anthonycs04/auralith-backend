@@ -21,6 +21,11 @@ export class CatalogController {
     return this.catalog.listCategories()
   }
 
+  @Get('subcategories')
+  subcategories() {
+    return this.catalog.listSubcategories()
+  }
+
   @Get('intentions')
   intentions() {
     return this.catalog.listIntentions()

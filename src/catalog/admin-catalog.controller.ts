@@ -19,6 +19,7 @@ import {
   CategoryDto,
   IntentionDto,
   ProductDto,
+  SubcategoryDto,
 } from './catalog.dto'
 import { CatalogService } from './catalog.service'
 import { StorageService } from './storage.service'
@@ -118,6 +119,26 @@ export class AdminCatalogController {
     return this.catalog.deleteCategory(id)
   }
 
+  @Get('subcategories')
+  subcategories() {
+    return this.catalog.listSubcategories(true)
+  }
+
+  @Post('subcategories')
+  createSubcategory(@Body() dto: SubcategoryDto) {
+    return this.catalog.saveSubcategory(dto)
+  }
+
+  @Put('subcategories/:id')
+  updateSubcategory(@Param('id') id: string, @Body() dto: SubcategoryDto) {
+    return this.catalog.saveSubcategory(dto, id)
+  }
+
+  @Delete('subcategories/:id')
+  deleteSubcategory(@Param('id') id: string) {
+    return this.catalog.deleteSubcategory(id)
+  }
+
   @Get('intentions')
   intentions() {
     return this.catalog.listIntentions(true)
@@ -131,6 +152,20 @@ export class AdminCatalogController {
   @Put('intentions/:id')
   updateIntention(@Param('id') id: string, @Body() dto: IntentionDto) {
     return this.catalog.saveIntention(dto, id)
+  }
+
+  @Post('intentions/:id/image')
+  async uploadIntentionImage(
+    @Param('id') id: string,
+    @Req() request: FastifyRequest,
+  ) {
+    const file = (await request.file()) as MultipartFile | undefined
+
+    if (!file) {
+      throw new BadRequestException('No se recibio ningun archivo.')
+    }
+
+    return this.storage.uploadIntentionImage(id, file)
   }
 
   @Delete('intentions/:id')

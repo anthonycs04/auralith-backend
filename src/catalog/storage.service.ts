@@ -133,6 +133,48 @@ export class StorageService {
     return updatedCategory
   }
 
+  async uploadIntentionImage(intentionId: string, file: MultipartFile) {
+    const [intention] = await this.database.sql<{ id: string }[]>`
+      select id from public.intentions where id = ${intentionId}
+    `
+
+    if (!intention) {
+      throw new NotFoundException('Intencion no encontrada.')
+    }
+
+    const { buffer, metadata } = await this.compressImage(file)
+    const path = `intentions/${intentionId}/${randomUUID()}.webp`
+    const { error } = await this.supabase.admin.storage
+      .from(this.bucket)
+      .upload(path, buffer, {
+        cacheControl: '31536000',
+        contentType: 'image/webp',
+        upsert: false,
+      })
+
+    if (error) {
+      throw new BadRequestException(`No se pudo subir la imagen: ${error.message}`)
+    }
+
+    const {
+      data: { publicUrl },
+    } = this.supabase.admin.storage.from(this.bucket).getPublicUrl(path)
+
+    const [updatedIntention] = await this.database.sql`
+      update public.intentions
+      set image_url = ${publicUrl}, updated_at = now()
+      where id = ${intentionId}
+      returning
+        id,
+        image_url as "imageUrl",
+        ${path} as "storagePath",
+        ${metadata.width ?? null} as width,
+        ${metadata.height ?? null} as height
+    `
+
+    return updatedIntention
+  }
+
   async deleteProductImage(imageId: string) {
     const [image] = await this.database.sql<
       { storage_path: string | null }[]

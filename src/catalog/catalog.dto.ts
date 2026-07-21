@@ -21,6 +21,10 @@ export class CatalogQueryDto {
 
   @IsOptional()
   @IsString()
+  subcategoria?: string
+
+  @IsOptional()
+  @IsString()
   buscar?: string
 
   @IsOptional()
@@ -80,6 +84,37 @@ export class CategoryDto {
   seo?: Record<string, unknown>
 }
 
+export class SubcategoryDto {
+  @IsOptional()
+  @IsString()
+  id?: string
+
+  @IsString()
+  categoryId!: string
+
+  @IsString()
+  slug!: string
+
+  @IsString()
+  name!: string
+
+  @IsOptional()
+  @IsString()
+  description?: string
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean
+
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number
+
+  @IsOptional()
+  @IsObject()
+  seo?: Record<string, unknown>
+}
+
 export class IntentionDto {
   @IsOptional()
   @IsString()
@@ -102,6 +137,10 @@ export class IntentionDto {
   @IsOptional()
   @IsString()
   ritualPrompt?: string
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string
 
   @IsOptional()
   @IsString()
@@ -225,6 +264,11 @@ export class ProductDto {
   @IsArray()
   @IsString({ each: true })
   intentionIds?: string[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  subcategoryIds?: string[]
 
   @IsOptional()
   @IsObject()
